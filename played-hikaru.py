@@ -45,7 +45,6 @@ def get_all_games(username):
 
     return games_dict
 
-# Example Usage
 username = "Hikaru"
 games_dict = get_all_games(username)
 
