@@ -87,7 +87,7 @@ def filter_highest_precedence_titled_players(games_dict):
             return matching_players  # Return only the highest-ranked category
 
     return {}  # No titled opponents found
-username = "gfitz01"  # Replace with your Chess.com username
+username = "gfitz01"  
 games_dict = get_all_games(username)  # Fetch games played
 filtered_games = filter_highest_precedence_titled_players(games_dict)
 
