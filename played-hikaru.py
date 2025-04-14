@@ -5,6 +5,7 @@
 
 import requests
 import time
+import csv
 headers = {"User-Agent": "Hikaru Number Calculator - Chess.com account: gfitz01 - email: gavyvfitz@gmail.com"} #Gotta have this in here or it returns 403s
 TITLE_PRECEDENCE = [
     "GM", "WGM", "IM", "WIM", "FM", "WFM", "CM", "WCM", "NM"
@@ -58,7 +59,7 @@ def get_titled_players_by_category():
 
     for title in TITLE_PRECEDENCE:
         url = f"https://api.chess.com/pub/titled/{title}"
-        response = requests.get(url, headers={"User-Agent": "MyChessApp/1.0 (Contact: your_email@example.com)"})
+        response = requests.get(url, headers=headers)
         
         if response.status_code == 200:
             titled_players[title] = set(response.json().get("players", []))
@@ -87,15 +88,72 @@ def filter_highest_precedence_titled_players(games_dict):
             return matching_players  # Return only the highest-ranked category
 
     return {}  # No titled opponents found
+
+def read_csv_to_dict(filename):
+    """
+    Reads a CSV file and converts it into a dictionary.
+    Assumes the first column is the key and the second column is the value.
+
+    :param filename: Path to the CSV file
+    :return: Dictionary with keys and values from the CSV
+    """
+    data_dict = {}
+    with open(filename, mode='r', newline='', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            # Assuming "Username" is the key and "Game URL" is the value
+            data_dict[row["Username"]] = row["Game URL"]
+    return data_dict
+
+def find_highest_rated_player(usernames):
+    """
+    Finds the highest-rated player from a list of usernames using Chess.com's API.
+
+    :param usernames: List of usernames to check
+    :return: Tuple (username, rating) of the highest-rated player
+    """
+    highest_rated_player = None
+    highest_rating = -1
+
+    for username in usernames:
+        url = f"https://api.chess.com/pub/player/{username}/stats"
+        response = requests.get(url, headers=headers)
+
+        if response.status_code == 200:
+            stats = response.json()
+            # Assuming we are checking the "chess_blitz" rating
+            rating = stats.get("chess_blitz", {}).get("last", {}).get("rating", 0)
+            if rating > highest_rating:
+                highest_rating = rating
+                highest_rated_player = username
+        else:
+            print(f"Error fetching stats for {username}")
+
+        time.sleep(1)  # Respect API rate limits
+
+    return highest_rated_player
+
+hikaru_dict = read_csv_to_dict("played-hikaru.csv")
+
 username = "gfitz01"  
-games_dict = get_all_games(username)  # Fetch games played
-filtered_games = filter_highest_precedence_titled_players(games_dict)
+nextUsername = ""
+outDict = {}
+while True:
+    if username in hikaru_dict:
+        outDict[username] = hikaru_dict[username]
+        print(f"Found {username} in the CSV. Game URL: {hikaru_dict[username]}")
+        break
+    games_dict = get_all_games(username)
+    if not games_dict:
+        print("No games found for this username.")
+        break
+    title_dict = filter_highest_precedence_titled_players(games_dict)
+    if title_dict:
+        nextUsername = find_highest_rated_player(title_dict.keys())
+    else:
+        nextUsername = find_highest_rated_player(games_dict.keys())
+    outDict[username] = games_dict[nextUsername]
+    username = nextUsername
+    print (f"Next username: {nextUsername}")
 
-# Print results
-for player, game_link in games_dict.items():
-    print(f"{player}: {game_link}")
-
-print("\nFiltered games:")
-
-for player, game_link in filtered_games.items():
-    print(f"{player} ({game_link})")
+print(outDict)
