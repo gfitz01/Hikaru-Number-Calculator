@@ -13,7 +13,12 @@ TITLE_PRECEDENCE = [
 
 
 def get_all_games(username):
+    """
+    Fetches all games played by the given username and includes opponent ratings.
 
+    :param username: Chess.com username
+    :return: Dictionary {opponent: {"game_url": url, "rating": rating}}
+    """
     base_url = f"https://api.chess.com/pub/player/{username}/games/"
     archives_response = requests.get(base_url + "archives", headers=headers)
 
@@ -26,7 +31,7 @@ def get_all_games(username):
 
     for archive_url in archives:
         time.sleep(1)  # Respect Chess.com's API rate limits
-        response = requests.get(archive_url, headers=headers) #headers=headers is necessary to avoid 403s
+        response = requests.get(archive_url, headers=headers)
         
         if response.status_code != 200:
             print(f"Error fetching data for {archive_url}")
@@ -42,10 +47,12 @@ def get_all_games(username):
 
             if white.lower() == username.lower():
                 opponent = black
+                opponent_rating = game["black"].get("rating", 0)
             else:
                 opponent = white
+                opponent_rating = game["white"].get("rating", 0)
 
-            games_dict[opponent] = game_url  # Always overwrite, keeping the last game found
+            games_dict[opponent] = {"game_url": game_url, "rating": opponent_rating}
 
     return games_dict
 
@@ -74,15 +81,19 @@ def filter_highest_precedence_titled_players(games_dict):
     """
     Filters the highest precedence titled players who are in the games dictionary.
 
-    :param games_dict: Dictionary {opponent: game_link}
-    :return: Dictionary {highest_precedence_titled_player: game_link}
+    :param games_dict: Dictionary {opponent: {"game_url": url, "rating": rating}}
+    :return: Dictionary {highest_precedence_titled_player: {"game_url": url, "rating": rating}}
     """
     titled_players_by_category = get_titled_players_by_category()
 
     # Find the highest precedence title with at least one opponent in games_dict
     for title in TITLE_PRECEDENCE:
         titled_players = titled_players_by_category[title]
-        matching_players = {player: games_dict[player] for player in games_dict if player in titled_players}
+        matching_players = {
+            player: games_dict[player]
+            for player in games_dict
+            if player in titled_players
+        }
 
         if matching_players:
             return matching_players  # Return only the highest-ranked category
@@ -105,31 +116,21 @@ def read_csv_to_dict(filename):
             data_dict[row["Username"]] = row["Game URL"]
     return data_dict
 
-def find_highest_rated_player(usernames):
+def find_highest_rated_player(games_dict):
     """
-    Finds the highest-rated player from a list of usernames using Chess.com's API.
+    Finds the highest-rated player from the games dictionary.
 
-    :param usernames: List of usernames to check
-    :return: Tuple (username, rating) of the highest-rated player
+    :param games_dict: Dictionary {opponent: {"game_url": url, "rating": rating}}
+    :return: The username of the highest-rated player
     """
     highest_rated_player = None
     highest_rating = -1
 
-    for username in usernames:
-        url = f"https://api.chess.com/pub/player/{username}/stats"
-        response = requests.get(url, headers=headers)
-
-        if response.status_code == 200:
-            stats = response.json()
-            # Assuming we are checking the "chess_blitz" rating
-            rating = stats.get("chess_blitz", {}).get("last", {}).get("rating", 0)
-            if rating > highest_rating:
-                highest_rating = rating
-                highest_rated_player = username
-        else:
-            print(f"Error fetching stats for {username}")
-
-        time.sleep(1)  # Respect API rate limits
+    for opponent, details in games_dict.items():
+        rating = details.get("rating", 0)
+        if rating > highest_rating:
+            highest_rating = rating
+            highest_rated_player = opponent
 
     return highest_rated_player
 
@@ -149,11 +150,11 @@ while True:
         break
     title_dict = filter_highest_precedence_titled_players(games_dict)
     if title_dict:
-        nextUsername = find_highest_rated_player(title_dict.keys())
+        nextUsername = find_highest_rated_player(title_dict)
     else:
-        nextUsername = find_highest_rated_player(games_dict.keys())
-    outDict[username] = games_dict[nextUsername]
+        nextUsername = find_highest_rated_player(games_dict)
+    outDict[username] = games_dict[nextUsername]  # Store the full details for the next username
     username = nextUsername
-    print (f"Next username: {nextUsername}")
+    print(f"Next username: {nextUsername}")
 
 print(outDict)
