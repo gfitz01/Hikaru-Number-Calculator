@@ -3,6 +3,7 @@
 #Should work for any username, probably call this function in the main program
 #
 
+#!/usr/bin/env python3
 import requests
 import time
 import csv
