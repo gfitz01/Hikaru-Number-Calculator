@@ -7,6 +7,8 @@
 import requests
 import time
 import csv
+import os
+
 headers = {"User-Agent": "Hikaru Number Calculator - Chess.com account: gfitz01 - email: gavyvfitz@gmail.com"} #Gotta have this in here or it returns 403s
 TITLE_PRECEDENCE = [
     "GM", "WGM", "IM", "WIM", "FM", "WFM", "CM", "WCM", "NM"
@@ -135,7 +137,8 @@ def find_highest_rated_player(games_dict):
 
     return highest_rated_player
 
-hikaru_dict = read_csv_to_dict("played-hikaru.csv")
+csv_path = os.path.join(os.path.dirname(__file__), "played-hikaru.csv") # Added for WordPress, wouldn't work otherwise. Returns the exact path for csv file
+hikaru_dict = read_csv_to_dict(csv_path)
 
 username = "gfitz01"  
 nextUsername = ""
