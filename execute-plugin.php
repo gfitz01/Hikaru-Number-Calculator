@@ -1,53 +1,108 @@
 <?php
 /*
 Plugin Name: Python
-Description: Runs a Python script that finds a path to Hikaru when you click a button using AJAX.
+Description: Runs a Python script that finds a path to Hikaru when you enter a username.
 Version: 1.0
 Author: John DelPrete
 */
 
+// 
 function hikaru_button_shortcode() {
   ob_start();
   ?>
+  <form id="hikaru-form">
+    <label for="username_input">Enter Username:</label>
+    <input type="text" id="username_input" name="username" required>
+    <button type="submit">Submit</button>
+  </form>
+
+  <div id="loading-message" style="display:none;">Search should start in a few seconds.</div>
   <div id="python-output"></div>
-  <button id="run-python">Find Path</button>
-  <div id="loading-message" style="display:none;">Running, please wait...</div>
 
   <script>
-  document.getElementById("run-python").addEventListener("click", function () {
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("hikaru-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+
+    const username = document.getElementById("username_input").value;
     const output = document.getElementById("python-output");
-    const loadingMessage = document.getElementById("loading-message");
-    
-    //shows loading message and hides button
-    loadingMessage.style.display = 'block';
+    const loading = document.getElementById("loading-message");
+
     output.innerHTML = "";
-    
-    console.log("AJAX request started...");
-    
-    //sends AJAX request
+    loading.style.display = "block";
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, 600000); // 10 minutes
+
     fetch("<?php echo admin_url('admin-ajax.php'); ?>", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: "action=run_hikaru_script"
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams({
+        action: "run_hikaru_script",
+        username: username
+      }),
+      signal: controller.signal
     })
-    .then(response => response.text())
-    .then(data => {
-        console.log("AJAX response received");
-        console.log(data); 
-        output.innerHTML = `<pre>${data}</pre>`;
-        loadingMessage.style.display = 'none';  //hides loading message
-    })
-    .catch(error => {
-        console.error("AJAX error:", error);
-        output.innerHTML = "Error running script.";
-        loadingMessage.style.display = 'none';  //hides loading message
+    .then(res => res.text())
+    .then(text => {
+      try {
+        const data = JSON.parse(text);
+        clearTimeout(timeout);
+
+        loading.style.display = "none";
+        
+        if (data.error) {
+          output.innerHTML = `<pre style="color:red;">${data.error}</pre>`;
+        } else {
+          output.innerHTML = `<pre>${data.log || 'Started search...'}</pre>`;
+          pollScriptStatus(); // starts polling
+        }
+      } catch (e) {
+        output.innerHTML = `<pre style="color:red;">Unexpected response:\n${text}</pre>`;
+        console.error("JSON parse error:", e);
+      }
+    }) 
+    .catch(err => {
+      clearTimeout(timeout);
+      output.innerHTML = "An error occurred: " + err.message;
+      console.error("Fetch error:", err);
     });
+
+    function pollScriptStatus() {
+      const statusInterval = setInterval(() => {
+        fetch("<?php echo admin_url('admin-ajax.php'); ?>", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: new URLSearchParams({
+            action: "check_hikaru_script_status"
+          })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.log) {
+            output.innerHTML = `<pre>${data.log}</pre>`;
+          }
+          if (data.done || data.error) {
+            clearInterval(statusInterval);
+            loading.style.display = "none";
+          }
+        })
+        .catch(err => {
+          console.error("Polling error:", err);
+          clearInterval(statusInterval);
+          output.innerHTML = `<pre style="color:red;">Polling failed.</pre>`;
+        });
+      }, 5000); // every 5 seconds
+    }
+  });
 });
-
-
-  </script>
+</script>
   <?php
   return ob_get_clean();
 }
@@ -56,40 +111,65 @@ function hikaru_button_shortcode() {
 add_shortcode('hikaru_button', 'hikaru_button_shortcode');
 
 function handle_hikaru_ajax() {
-    ini_set('max_execution_time', 0);  //remove time limit
-    $python_path = '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3';
+    if (!defined('DOING_AJAX') || !DOING_AJAX) {
+        wp_send_json_error(['error' => 'Unauthorized access.']);
+    }
+
+    // prevents whitespace or warnings before JSON
+    if (ob_get_length()) ob_clean();
+    header('Content-Type: application/json');
+    ini_set('max_execution_time', 0);
+    ignore_user_abort(true);
+    set_time_limit(0);
+
+    $username = isset($_POST['username']) ? trim($_POST['username']) : '';
+    if (empty($username)) {
+        wp_send_json_error(['error' => 'No username provided.']);
+    }
+
+    $python_path = '/usr/bin/python3'; // path for the server
     $file = __DIR__ . '/played-hikaru.py';
-    $csv_file = realpath(__DIR__ . '/played-hikaru.csv'); //returns full path, wasn't working otherwise
+    $csv_file = realpath(__DIR__ . '/played-hikaru.csv');
+    $log_file = '/tmp/hikaru_script.log';
 
-    if (!file_exists($file)) {
-      error_log("Python file not found at: " . $file);
-      echo "Python file not found.";
-      wp_die();  //stops execution
-    }
+    // clears contents of log file so it can be reused
+    @unlink($log_file);
 
-    if (!file_exists($csv_file)) {
-      error_log("CSV file not found at: " . $csv_file);
-      echo "CSV file not found.";
-      wp_die(); //stops execution
-    }
+    $command = escapeshellcmd($python_path) . ' ' . escapeshellarg($file) . ' ' . escapeshellarg($csv_file) . ' ' . escapeshellarg($username);
+    $command .= ' > ' . escapeshellarg($log_file) . ' 2>&1 &';
 
+    error_log("Executing command: $command");
+    shell_exec($command);
 
-    $command = escapeshellcmd($python_path) . ' ' . escapeshellarg($file) . ' ' . escapeshellarg($csv_file);
-    error_log("Running command: " . $command);
-
-    $output = shell_exec($command);
-
-    //was used for debugging
-    if ($output === null) {
-      error_log("Python script failed to execute");
-      echo "Error running Python script.";
-    } else {
-      error_log("Python script output: " . $output);
-      echo $output;
-    }
-    wp_die(); //ends AJAX
+    wp_send_json_success(['status' => 'Job started successfully.', 'log' => null]);
 }
 
-#wp_ajax handle requests with AJAX. run_hikaru_script is the previously specified body for POST
+// wp_ajax handle requests with AJAX. run_hikaru_script is the previously specified body for POST
 add_action('wp_ajax_run_hikaru_script', 'handle_hikaru_ajax');
 add_action('wp_ajax_nopriv_run_hikaru_script', 'handle_hikaru_ajax'); //for non-logged-in users
+
+function check_hikaru_script_status() {
+    header('Content-Type: application/json');
+
+    $log_file = '/tmp/hikaru_script.log';
+    $log_content = file_get_contents($log_file);
+
+    if ($log_content === false) {
+        echo json_encode(['error' => 'Log file not found.']);
+        wp_die();
+    }
+
+    // checks for completion condition (for example, you can check for a specific line in the log file)
+    $done = strpos($log_content, 'SCRIPT FINISHED') !== false;
+
+    echo json_encode([
+        'status' => 'Job is running...',
+        'log' => $log_content,
+        'done' => $done
+    ]);
+    wp_die();
+}
+
+// hook for checking status
+add_action('wp_ajax_check_hikaru_script_status', 'check_hikaru_script_status');
+add_action('wp_ajax_nopriv_check_hikaru_script_status', 'check_hikaru_script_status');
