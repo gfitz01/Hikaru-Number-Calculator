@@ -8,7 +8,7 @@ Example Usernames (case sensitive):
 ## Ways To Use:
   ### **Option 1: Website**
 
-    **pathtohikaru.com**
+   **pathtohikaru.com**
     
     NOTE: As of 4/28/25, this website is not able to be accessed using Villanova's Wi-Fi. Cellular service or a home Wi-Fi should be working alternatives.
 
