@@ -120,17 +120,20 @@ def read_csv_to_dict(filename):
             data_dict[row["Username"]] = row["Game URL"]
     return data_dict
 
-def find_highest_rated_player(games_dict):
+def find_highest_rated_player(games_dict, outDict):
     """
-    Finds the highest-rated player from the games dictionary.
+    Finds the highest-rated player from the games dictionary, ensuring the username is not repeated.
 
     :param games_dict: Dictionary {opponent: {"game_url": url, "rating": rating}}
-    :return: The username of the highest-rated player
+    :param outDict: Dictionary of already processed usernames
+    :return: The username of the highest-rated player, or None if no valid player is found
     """
     highest_rated_player = None
     highest_rating = -1
 
     for opponent, details in games_dict.items():
+        if opponent in outDict:  # Skip usernames already in outDict
+            continue
         rating = details.get("rating", 0)
         if rating > highest_rating:
             highest_rating = rating
@@ -152,20 +155,31 @@ nextUsername = ""
 outDict = {}
 while True:
     if username in hikaru_dict:
-        outDict[username] = hikaru_dict[username]
-        print(f"Found {username} in the CSV. Game URL: {hikaru_dict[username]}")
+        # Wrap the game URL in a dictionary to match the expected structure
+        outDict[username] = {"game_url": hikaru_dict[username]}
         break
+    print(username)
     games_dict = get_all_games(username)
     if not games_dict:
         print("No games found for this username.")
         break
     title_dict = filter_highest_precedence_titled_players(games_dict)
     if title_dict:
-        nextUsername = find_highest_rated_player(title_dict)
+        nextUsername = find_highest_rated_player(title_dict, outDict)
     else:
-        nextUsername = find_highest_rated_player(games_dict)
+        nextUsername = find_highest_rated_player(games_dict, outDict)
+    
+    if not nextUsername:  # Handle case where no valid player is found
+        print("No valid next player found. This message should come up in the rare case of a player only playing someone who has already been passed in the loop")
+        break
+
     outDict[username] = games_dict[nextUsername]  # Store the full details for the next username
     username = nextUsername
-    print(f"Next username: {nextUsername}")
 
-print(outDict)
+output = []
+for user, details in outDict.items():
+    # Access the "game_url" key safely
+    output.append(f"{user} played {details['game_url']}")
+
+# Join the output into a readable string
+print(" -> ".join(output) + " -> Hikaru")
