@@ -10,6 +10,41 @@ Author: John DelPrete
 function hikaru_button_shortcode() {
   ob_start();
   ?>
+
+<style>
+    #hikaru-form {
+      margin: 20px 0;
+      padding: 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background-color: #f9f9f9;
+      max-width: 400px;
+    }
+
+    #hikaru-form label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+
+    #hikaru-form input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 15px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-sizing: border-box;
+    }
+
+    #hikaru-form button {
+      background-color: #0073aa;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 4px;
+    }
+  </style>
+
   <form id="hikaru-form">
     <label for="username_input">Enter Username:</label>
     <input type="text" id="username_input" name="username" required>
