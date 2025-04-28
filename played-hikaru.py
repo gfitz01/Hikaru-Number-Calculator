@@ -158,7 +158,6 @@ while True:
         # Wrap the game URL in a dictionary to match the expected structure
         outDict[username] = {"game_url": hikaru_dict[username]}
         break
-    print(username)
     games_dict = get_all_games(username)
     if not games_dict:
         print("No games found for this username.")
@@ -181,5 +180,5 @@ for user, details in outDict.items():
     # Access the "game_url" key safely
     output.append(f"{user} played {details['game_url']}")
 
-# Join the output into a readable string
-print(" -> ".join(output) + " -> Hikaru")
+# Join the output into a readable string with a newline after each arrow
+print("\n -> ".join(output) + " -> Hikaru")
