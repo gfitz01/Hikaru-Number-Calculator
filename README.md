@@ -10,7 +10,6 @@ Example Usernames (case sensitive):
 
    **pathtohikaru.com**
     
-    NOTE: As of 4/28/25, this website is not able to be accessed using Villanova's Wi-Fi. Cellular service or a home Wi-Fi should be working alternatives.
 
   ### **Option 2: Locally**
     Download the repository, open up the played-hikaru.py file in something like VSCode or some other software that can run python.
